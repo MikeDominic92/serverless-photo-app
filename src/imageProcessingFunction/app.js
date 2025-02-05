@@ -1,6 +1,7 @@
-const AWS = require('aws-sdk');
-const s3 = new AWS.S3();
+const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
+
+const s3Client = new S3Client();
 
 exports.handler = async (event) => {
   try {
@@ -14,8 +15,15 @@ exports.handler = async (event) => {
     }
     
     // Download the image from S3
-    const inputParams = { Bucket: bucket, Key: key };
-    const inputData = await s3.getObject(inputParams).promise();
+    const getCommand = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const { Body: inputData } = await s3Client.send(getCommand);
+    
+    // Convert the readable stream to a buffer
+    const chunks = [];
+    for await (const chunk of inputData) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
     
     // Process image to create different sizes
     const sizes = {
@@ -28,23 +36,23 @@ exports.handler = async (event) => {
     const promises = [];
     
     for (const [size, width] of Object.entries(sizes)) {
-      const image = sharp(inputData.Body)
+      const image = sharp(buffer)
         .resize(width, null, {
           fit: 'inside',
           withoutEnlargement: true
         })
         .jpeg({ quality: 80 });
       
-      const buffer = await image.toBuffer();
+      const processedBuffer = await image.toBuffer();
       
-      const uploadParams = {
+      const putCommand = new PutObjectCommand({
         Bucket: bucket,
         Key: `${size}/${fileName}`,
-        Body: buffer,
+        Body: processedBuffer,
         ContentType: 'image/jpeg'
-      };
+      });
       
-      promises.push(s3.putObject(uploadParams).promise());
+      promises.push(s3Client.send(putCommand));
     }
     
     await Promise.all(promises);

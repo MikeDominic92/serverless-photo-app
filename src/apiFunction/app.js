@@ -1,5 +1,14 @@
-const AWS = require('aws-sdk');
-const dynamodb = new AWS.DynamoDB.DocumentClient();
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  DeleteCommand,
+  ScanCommand
+} = require('@aws-sdk/lib-dynamodb');
+
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 exports.handler = async (event) => {
   const headers = {
@@ -16,37 +25,37 @@ exports.handler = async (event) => {
       case 'GET':
         if (event.pathParameters?.id) {
           // Get single image metadata
-          const getParams = {
+          const getCommand = new GetCommand({
             TableName: tableName,
             Key: {
               id: event.pathParameters.id
             }
-          };
+          });
           
-          const item = await dynamodb.get(getParams).promise();
+          const { Item } = await dynamodb.send(getCommand);
           return {
-            statusCode: item.Item ? 200 : 404,
+            statusCode: Item ? 200 : 404,
             headers,
-            body: JSON.stringify(item.Item || { message: 'Image not found' })
+            body: JSON.stringify(Item || { message: 'Image not found' })
           };
         } else {
           // List all images metadata
-          const queryParams = {
+          const scanCommand = new ScanCommand({
             TableName: tableName,
             Limit: 50 // Limit results to prevent large responses
-          };
+          });
           
-          const data = await dynamodb.scan(queryParams).promise();
+          const { Items } = await dynamodb.send(scanCommand);
           return {
             statusCode: 200,
             headers,
-            body: JSON.stringify(data.Items)
+            body: JSON.stringify(Items)
           };
         }
         
       case 'POST':
         const item = JSON.parse(event.body);
-        const putParams = {
+        const putCommand = new PutCommand({
           TableName: tableName,
           Item: {
             id: item.id,
@@ -55,13 +64,13 @@ exports.handler = async (event) => {
             sizes: item.sizes || ['thumbnail', 'medium', 'large'],
             metadata: item.metadata || {}
           }
-        };
+        });
         
-        await dynamodb.put(putParams).promise();
+        await dynamodb.send(putCommand);
         return {
           statusCode: 201,
           headers,
-          body: JSON.stringify(putParams.Item)
+          body: JSON.stringify(putCommand.input.Item)
         };
         
       case 'DELETE':
@@ -73,14 +82,14 @@ exports.handler = async (event) => {
           };
         }
         
-        const deleteParams = {
+        const deleteCommand = new DeleteCommand({
           TableName: tableName,
           Key: {
             id: event.pathParameters.id
           }
-        };
+        });
         
-        await dynamodb.delete(deleteParams).promise();
+        await dynamodb.send(deleteCommand);
         return {
           statusCode: 204,
           headers

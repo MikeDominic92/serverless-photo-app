@@ -1,6 +1,9 @@
-const AWS = require('aws-sdk');
-const s3 = new AWS.S3();
+const { S3Client } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
+
+const s3Client = new S3Client();
 
 exports.handler = async (event) => {
   try {
@@ -13,14 +16,13 @@ exports.handler = async (event) => {
     const bucketName = process.env.IMAGE_BUCKET;
     
     // Generate pre-signed URL
-    const params = {
+    const command = new PutObjectCommand({
       Bucket: bucketName,
       Key: `originals/${fileName}`,
-      Expires: 300, // URL valid for 5 minutes
       ContentType: contentType
-    };
+    });
     
-    const uploadUrl = await s3.getSignedUrlPromise('putObject', params);
+    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 }); // URL valid for 5 minutes
     
     return {
       statusCode: 200,
