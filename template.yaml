@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Photo Sharing Application
+
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: nodejs18.x
+    MemorySize: 256
+
+Resources:
+  ImageUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/uploadFunction/app.handler
+      Environment:
+        Variables:
+          IMAGE_BUCKET: !Ref ImageBucket
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref ImageBucket
+      Events:
+        UploadAPI:
+          Type: Api
+          Properties:
+            Path: /upload
+            Method: GET
+
+  ImageProcessingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/imageProcessingFunction/app.handler
+      MemorySize: 1024
+      Timeout: 30
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref ImageBucket
+      Events:
+        S3UploadEvent:
+          Type: S3
+          Properties:
+            Bucket: !Ref ImageBucket
+            Events: s3:ObjectCreated:*
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/apiFunction/app.handler
+      Environment:
+        Variables:
+          METADATA_TABLE: !Ref MetadataTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MetadataTable
+      Events:
+        GetImages:
+          Type: Api
+          Properties:
+            Path: /images
+            Method: GET
+        GetImage:
+          Type: Api
+          Properties:
+            Path: /images/{id}
+            Method: GET
+
+  ImageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST, DELETE, HEAD]
+            AllowedOrigins: ['*']
+            MaxAge: 3000
+
+  MetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-metadata"
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-users"
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub "${AWS::StackName}-client"
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+  ImageBucketName:
+    Description: Name of S3 bucket for storing images
+    Value: !Ref ImageBucket

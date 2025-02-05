@@ -1,0 +1,10 @@
+{
+  "name": "serverless-photo-app",
+  "version": "1.0.0",
+  "description": "Serverless photo sharing application",
+  "dependencies": {
+    "aws-sdk": "^2.1550.0",
+    "sharp": "^0.32.6",
+    "uuid": "^9.0.1"
+  }
+}
